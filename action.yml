@@ -106,11 +106,23 @@ runs:
       run: |
         # Harness checks run only inside an OS sandbox and fail closed without
         # one (exit 2). Linux backend order: bubblewrap, firejail, docker.
-        # Hosted runners have docker, so this step is an optimization: bwrap
-        # wraps each check far cheaper than docker. Failure here is non-fatal.
-        if [ "$(uname -s)" = "Linux" ] && ! command -v bwrap >/dev/null; then
-          sudo apt-get install -y -q bubblewrap 2>/dev/null || \
-            echo "::notice::bubblewrap install skipped; harness will use firejail/docker or fail closed"
+        # Ubuntu 24.04 runners ship AppArmor restrictions on unprivileged user
+        # namespaces, which makes bwrap fail its usability probe even when
+        # installed; relaxing it on the ephemeral runner VM is the documented
+        # trade for a working sandbox. Every step here is non-fatal: with no
+        # admitted backend the harness fails closed, never unsandboxed.
+        if [ "$(uname -s)" = "Linux" ]; then
+          command -v bwrap >/dev/null || sudo apt-get install -y -q bubblewrap 2>/dev/null || true
+          if command -v bwrap >/dev/null && \
+             ! bwrap --ro-bind / / --unshare-net --die-with-parent true 2>/dev/null; then
+            sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
+            sudo sysctl -qw kernel.unprivileged_userns_clone=1 2>/dev/null || true
+          fi
+        fi
+        BACKEND=$(python3 -c "from harness.sandbox import backend_name; print(backend_name())")
+        echo "harness sandbox backend: $BACKEND"
+        if [ "$BACKEND" = "None" ]; then
+          echo "::warning::no OS sandbox backend admitted on this runner; deterministic checks will be blocked and the run will report cannot-verify (fail closed)."
         fi
 
     - name: Stage PR diff
