@@ -1,7 +1,7 @@
 name: "Harnessie Verify"
 description: >-
   Verify a PR's claims, not its word: sandboxed checks plus an independent
-  verifier model, fail-closed exit codes gate the merge.
+  verifier model; fail-closed exit codes gate merges.
 author: "Sam Rogers (Snap Synapse)"
 branding:
   icon: "check-circle"
