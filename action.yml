@@ -1,0 +1,229 @@
+name: "Harnessie Verify"
+description: >-
+  Claim-by-claim verification of a pull request: sandboxed deterministic
+  checks, then a fresh-context verifier model that tests each claim against
+  the artifacts. Fail-closed exit contract gates the merge.
+author: "Sam Rogers (Snap Synapse)"
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  criteria:
+    description: >-
+      Path to a claims file, or "auto" to derive claims from the PR body
+      (boilerplate stripped, provenance-stamped; auto is convenience, not
+      authority).
+    required: false
+    default: "auto"
+  checks:
+    description: >-
+      Deterministic check commands, one per line. Each runs sandboxed in the
+      workspace; exit 0 is the only accepted pass.
+    required: false
+    default: ""
+  models:
+    description: >-
+      Path to a Harnessie models.yaml in the repo. Mutually exclusive with
+      models-endpoint.
+    required: false
+    default: ""
+  models-endpoint:
+    description: >-
+      OpenAI-compatible base URL for the verifier model (e.g. a self-hosted
+      endpoint). Used when models is not set. API key must arrive as the
+      HARNESSIE_MODEL_API_KEY env var from the workflow, never as an input.
+    required: false
+    default: ""
+  models-model:
+    description: "Model id at models-endpoint (required with models-endpoint)."
+    required: false
+    default: ""
+  allow-network:
+    description: >-
+      Let check commands use the network (checks are network-denied by
+      default; the verifier agent stays denied regardless).
+    required: false
+    default: "false"
+  stage-diff:
+    description: >-
+      Stage the PR diff into the workspace as PR.diff so change-surface
+      claims are checkable. Requires actions/checkout with fetch-depth: 0.
+    required: false
+    default: "true"
+  fail-on-cannot-verify:
+    description: >-
+      Map exit 2 (cannot verify: no sandbox backend, provider error, missing
+      config) to a failing job. Fail-closed is the default and the
+      recommendation; set false for advisory mode.
+    required: false
+    default: "true"
+  report-artifact:
+    description: "Upload report.md and proofs as a workflow artifact."
+    required: false
+    default: "true"
+  harnessie-version:
+    description: "harnessie version to install (the action pins its tested default)."
+    required: false
+    default: "0.7.1"
+  max-steps:
+    description: "Verifier agent step ceiling."
+    required: false
+    default: "20"
+
+outputs:
+  verdict:
+    description: "VERIFIED, FAILED, or CANNOT_VERIFY"
+    value: ${{ steps.verify.outputs.verdict }}
+  exit-code:
+    description: "Raw harnessie verify exit code (0/1/2)"
+    value: ${{ steps.verify.outputs.exit_code }}
+  report-path:
+    description: "Path to the generated report.md"
+    value: ${{ steps.verify.outputs.report_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Refuse unsafe trigger
+      shell: bash
+      run: |
+        # pull_request_target with a PR-head checkout hands the PR author your
+        # secrets. This action refuses to be part of that pattern.
+        if [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
+          echo "::error::harnessie-verify-action must run on pull_request, never pull_request_target. See README: safe trigger pattern."
+          exit 1
+        fi
+
+    - name: Install harnessie
+      shell: bash
+      run: |
+        python3 -m pip install --quiet "harnessie==${{ inputs.harnessie-version }}"
+        harnessie --help >/dev/null
+
+    - name: Ensure sandbox backend (best effort)
+      shell: bash
+      run: |
+        # Harness checks run only inside an OS sandbox and fail closed without
+        # one (exit 2). Linux backend order: bubblewrap, firejail, docker.
+        # Hosted runners have docker, so this step is an optimization: bwrap
+        # wraps each check far cheaper than docker. Failure here is non-fatal.
+        if [ "$(uname -s)" = "Linux" ] && ! command -v bwrap >/dev/null; then
+          sudo apt-get install -y -q bubblewrap 2>/dev/null || \
+            echo "::notice::bubblewrap install skipped; harness will use firejail/docker or fail closed"
+        fi
+
+    - name: Stage PR diff
+      if: ${{ inputs.stage-diff == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      run: |
+        BASE_SHA="${{ github.event.pull_request.base.sha }}"
+        if git cat-file -e "$BASE_SHA" 2>/dev/null; then
+          MB=$(git merge-base "$BASE_SHA" HEAD 2>/dev/null || echo "$BASE_SHA")
+          git diff "$MB" HEAD > PR.diff
+          echo "staged PR.diff ($(wc -l < PR.diff) lines)"
+        else
+          echo "::warning::base sha not available (shallow checkout?); PR.diff not staged. Use actions/checkout with fetch-depth: 0 to enable change-surface claims."
+        fi
+
+    - name: Resolve criteria
+      id: criteria
+      shell: bash
+      run: |
+        if [ "${{ inputs.criteria }}" != "auto" ]; then
+          if [ ! -f "${{ inputs.criteria }}" ]; then
+            echo "::error::criteria file not found: ${{ inputs.criteria }}"
+            exit 1
+          fi
+          echo "path=${{ inputs.criteria }}" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # Auto mode: PR body verbatim minus HTML comments, provenance-stamped.
+        # Deliberately dumb: no model touches claim extraction, because an
+        # action that authors the claims it grades is self-dealing.
+        python3 - "$GITHUB_EVENT_PATH" <<'PYEOF'
+        import json, re, sys
+        event = json.load(open(sys.argv[1]))
+        body = (event.get("pull_request") or {}).get("body") or ""
+        body = re.sub(r"<!--.*?-->", "", body, flags=re.S).strip()
+        if not body:
+            print("::error::criteria: auto found an empty PR body; supply a claims file instead")
+            raise SystemExit(1)
+        with open("harnessie-claims.md", "w", encoding="utf-8") as f:
+            f.write("# Claims (auto-derived verbatim from the PR body; "
+                    "no extraction intelligence applied)\n\n")
+            f.write("Treat every assertion below as a claim to test against "
+                    "the workspace artifacts.\n\n---\n\n")
+            f.write(body + "\n")
+        PYEOF
+        echo "path=harnessie-claims.md" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve models config
+      id: models
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.models }}" ]; then
+          echo "path=${{ inputs.models }}" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [ -z "${{ inputs.models-endpoint }}" ] || [ -z "${{ inputs.models-model }}" ]; then
+          echo "::error::provide either models (a models.yaml path) or both models-endpoint and models-model"
+          exit 1
+        fi
+        cat > harnessie-models.yaml <<MODELSEOF
+        tiers:
+          mid:
+            provider: openai-compat
+            model_id: ${{ inputs.models-model }}
+            base_url: ${{ inputs.models-endpoint }}
+            api_key_env: HARNESSIE_MODEL_API_KEY
+            max_tokens: 8192
+            supports_effort: false
+        MODELSEOF
+        echo "path=harnessie-models.yaml" >> "$GITHUB_OUTPUT"
+
+    - name: Verify
+      id: verify
+      shell: bash
+      run: |
+        ARGS=(--workspace . --criteria "${{ steps.criteria.outputs.path }}"
+              --models "${{ steps.models.outputs.path }}"
+              --report-dir "$RUNNER_TEMP/harnessie-verify-report"
+              --max-steps "${{ inputs.max-steps }}")
+        [ "${{ inputs.allow-network }}" = "true" ] && ARGS+=(--allow-network)
+        while IFS= read -r line; do
+          [ -n "$line" ] && ARGS+=(--check "$line")
+        done <<< "${{ inputs.checks }}"
+        set +e
+        harnessie verify "${ARGS[@]}"
+        CODE=$?
+        set -e
+        case "$CODE" in
+          0) VERDICT=VERIFIED ;;
+          1) VERDICT=FAILED ;;
+          *) VERDICT=CANNOT_VERIFY ;;
+        esac
+        echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+        REPORT="$RUNNER_TEMP/harnessie-verify-report/report.md"
+        echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
+        if [ -f "$REPORT" ]; then
+          # Structured report to the job summary. Model prose stays in the
+          # artifact; the summary is the header + checks + verdict lines.
+          head -c 60000 "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "## Harnessie verify: $VERDICT (no report produced)" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ "$CODE" = "2" ] && [ "${{ inputs.fail-on-cannot-verify }}" != "true" ]; then
+          echo "::warning::verification could not run to a verdict (exit 2); advisory mode passed the job. Nothing was verified."
+          exit 0
+        fi
+        exit "$CODE"
+
+    - name: Upload report artifact
+      if: ${{ always() && inputs.report-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: harnessie-verify-report
+        path: ${{ runner.temp }}/harnessie-verify-report/
+        if-no-files-found: ignore

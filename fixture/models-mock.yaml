@@ -1,0 +1,7 @@
+# Offline fixture config: the mock provider produces no verdict, so the
+# verifier path ends cannot-verify (exit 2). CI uses this to prove the
+# fail-closed mapping and the advisory-mode relaxation, with zero network.
+tiers:
+  mid:
+    provider: mock
+    model_id: mock

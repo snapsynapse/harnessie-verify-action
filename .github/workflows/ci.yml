@@ -1,0 +1,75 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The offline matrix proves the action's wiring and exit-code mapping with
+  # zero network model calls. A real VERIFIED (exit 0) run needs a live
+  # verifier endpoint; that is the documented dogfood step, not CI.
+  failing-check-fails-job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          criteria: fixture/claims.md
+          checks: "false"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert FAILED
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "FAILED"
+          test "${{ steps.verify.outputs.exit-code }}" = "1"
+
+  cannot-verify-fails-closed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          criteria: fixture/claims.md
+          checks: "grep -q hello fixture/workspace/out.txt"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert CANNOT_VERIFY failed the job (fail-closed default)
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test "${{ steps.verify.outputs.exit-code }}" = "2"
+
+  cannot-verify-advisory-passes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: verify
+        uses: ./
+        with:
+          criteria: fixture/claims.md
+          checks: "grep -q hello fixture/workspace/out.txt"
+          models: fixture/models-mock.yaml
+          fail-on-cannot-verify: "false"
+          report-artifact: "false"
+      - name: Assert advisory mode passed with CANNOT_VERIFY
+        run: |
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+
+  refuses-pull-request-target:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target'
+    steps:
+      - uses: actions/checkout@v4
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          criteria: fixture/claims.md
+          models: fixture/models-mock.yaml
+      - name: Assert refusal
+        run: test "${{ steps.verify.outcome }}" = "failure"
