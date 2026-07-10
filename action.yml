@@ -1,8 +1,7 @@
 name: "Harnessie Verify"
 description: >-
-  Claim-by-claim verification of a pull request: sandboxed deterministic
-  checks, then a fresh-context verifier model that tests each claim against
-  the artifacts. Fail-closed exit contract gates the merge.
+  Verify a PR's claims, not its word: sandboxed checks plus an independent
+  verifier model, fail-closed exit codes gate the merge.
 author: "Sam Rogers (Snap Synapse)"
 branding:
   icon: "check-circle"
