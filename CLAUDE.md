@@ -22,7 +22,7 @@ It is a thin wrapper pinning a tested version of the `harnessie verify` CLI
   `shell: bash` + Python one-liners.
 - Runtime dependency: `harnessie` Python package, installed via `pip` at
   action-run time, version pinned by the `harnessie-version` input (default
-  `0.7.1` as of this writing — check `action.yml` for current pin).
+  `0.8.0` as of this writing; check `action.yml` for current pin).
 - Sandbox backends on Linux runners: bubblewrap, firejail, or docker (fail
   closed to CANNOT_VERIFY if none is admitted).
 - CI: GitHub Actions (`.github/workflows/ci.yml`), fully offline via a mock
@@ -85,7 +85,8 @@ There is no build step. Per `README.md` and `.github/workflows/ci.yml`:
 
 ## Current state
 
-- Version: `0.1.0` (per `CHANGELOG.md`), tags `v0` and `v0.1.0` on `main`.
+- Version: `0.1.1` (per `CHANGELOG.md`); release tags `v0.1.1` and `v0`
+  promote only after the exact release commit passes CI.
 - `main` is clean and up to date with `origin/main` as of the last check
   from this assessment; most recent commits (2026-07-09/10) were the initial
   release, a sandbox/AppArmor fix for Ubuntu 24.04 runners, Marketplace

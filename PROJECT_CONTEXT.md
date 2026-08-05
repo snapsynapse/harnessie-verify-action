@@ -47,8 +47,9 @@ exactly in any new content.
 
 ## Current status
 
-Initial release shipped: version `0.1.0`, tags `v0` and `v0.1.0`. `main` is
-clean and matches `origin/main`. Most recent work (2026-07-09/10) covered
-the initial release, an Ubuntu 24.04 sandbox/AppArmor fix, Marketplace
-description trims, and a `FUNDING.yml` addition. No open TODOs found in
-tracked files.
+Release `0.1.1` advances the tested Harnessie pin from `0.7.1` to `0.8.0`
+without changing the action's public inputs, outputs, or fail-closed verdict
+contract. The unsafe-trigger guard is shared by runtime and CI so the
+`pull_request_target` refusal is executed rather than represented by a
+permanently skipped job. Exact-version and stable-major tags promote only
+after the release commit passes CI.

@@ -64,7 +64,7 @@ inputs:
   harnessie-version:
     description: "harnessie version to install (the action pins its tested default)."
     required: false
-    default: "0.7.1"
+    default: "0.8.0"
   max-steps:
     description: "Verifier agent step ceiling."
     required: false
@@ -86,13 +86,7 @@ runs:
   steps:
     - name: Refuse unsafe trigger
       shell: bash
-      run: |
-        # pull_request_target with a PR-head checkout hands the PR author your
-        # secrets. This action refuses to be part of that pattern.
-        if [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
-          echo "::error::harnessie-verify-action must run on pull_request, never pull_request_target. See README: safe trigger pattern."
-          exit 1
-        fi
+      run: bash "$GITHUB_ACTION_PATH/scripts/refuse-unsafe-trigger.sh"
 
     - name: Install harnessie
       shell: bash
