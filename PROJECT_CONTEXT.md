@@ -10,6 +10,10 @@ reviewer opinion or the author's own narrative. It is a thin composite
 wrapper around the `harnessie verify` CLI from https://harnessie.com/
 (Apache-2.0), pinning a tested harnessie version per release.
 
+## Ecosystem relationship
+
+This repository owns the GitHub Action adapter, its security boundary, tested Harnessie pin, Marketplace release, and stable-major tag. The federated Harnessie authority map and release train live in [Harnessie ECOSYSTEM.md](https://github.com/snapsynapse/harnessie/blob/main/ECOSYSTEM.md). Core releases propagate here only after the released Harnessie version passes this repository's tests; this repository does not own Harnessie product strategy or engine-wrapper claims.
+
 Positioning line from the README: "Reviewers opine. This adjudicates."
 
 ## Audience
@@ -43,8 +47,9 @@ exactly in any new content.
 
 ## Current status
 
-Initial release shipped: version `0.1.0`, tags `v0` and `v0.1.0`. `main` is
-clean and matches `origin/main`. Most recent work (2026-07-09/10) covered
-the initial release, an Ubuntu 24.04 sandbox/AppArmor fix, Marketplace
-description trims, and a `FUNDING.yml` addition. No open TODOs found in
-tracked files.
+Release `0.1.1` advances the tested Harnessie pin from `0.7.1` to `0.8.0`
+without changing the action's public inputs, outputs, or fail-closed verdict
+contract. The unsafe-trigger guard is shared by runtime and CI so the
+`pull_request_target` refusal is executed rather than represented by a
+permanently skipped job. Exact-version and stable-major tags promote only
+after the release commit passes CI.

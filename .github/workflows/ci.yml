@@ -62,14 +62,16 @@ jobs:
 
   refuses-pull-request-target:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request_target'
     steps:
       - uses: actions/checkout@v4
-      - id: verify
-        continue-on-error: true
-        uses: ./
-        with:
-          criteria: fixture/claims.md
-          models: fixture/models-mock.yaml
-      - name: Assert refusal
-        run: test "${{ steps.verify.outcome }}" = "failure"
+      - name: Assert pull_request_target is refused
+        run: |
+          set +e
+          OUTPUT=$(bash scripts/refuse-unsafe-trigger.sh pull_request_target 2>&1)
+          CODE=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          test "$CODE" = "1"
+          grep -Fq "must run on pull_request, never pull_request_target" <<< "$OUTPUT"
+      - name: Assert pull_request is admitted
+        run: bash scripts/refuse-unsafe-trigger.sh pull_request
