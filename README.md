@@ -44,7 +44,7 @@ That is the whole install. The job summary gets a claim-by-claim table; the full
 | `stage-diff` | `true` | Write the PR diff to `PR.diff` in the workspace so claims like "docs-only" and "additive" are checkable. Needs `fetch-depth: 0`. |
 | `fail-on-cannot-verify` | `true` | Exit 2 fails the job. Set `false` for advisory mode; the job passes with a warning stating that nothing was verified. |
 | `report-artifact` | `true` | Upload report.md plus proof files as a workflow artifact. |
-| `harnessie-version` | `0.8.0` | The harnessie release this action version is tested against. Override at your own risk. |
+| `harnessie-version` | `1.0.0` | The harnessie release this action version is tested against. Override at your own risk. |
 | `max-steps` | `20` | Verifier agent step ceiling. |
 
 Outputs: `verdict` (VERIFIED / FAILED / CANNOT_VERIFY), `exit-code`, `report-path`.

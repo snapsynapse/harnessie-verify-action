@@ -64,7 +64,7 @@ inputs:
   harnessie-version:
     description: "harnessie version to install (the action pins its tested default)."
     required: false
-    default: "0.8.0"
+    default: "1.0.0"
   max-steps:
     description: "Verifier agent step ceiling."
     required: false

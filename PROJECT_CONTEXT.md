@@ -47,7 +47,7 @@ exactly in any new content.
 
 ## Current status
 
-Release `0.1.1` advances the tested Harnessie pin from `0.7.1` to `0.8.0`
+Release `0.1.2` advances the tested Harnessie pin from `0.8.0` to `1.0.0`
 without changing the action's public inputs, outputs, or fail-closed verdict
 contract. The unsafe-trigger guard is shared by runtime and CI so the
 `pull_request_target` refusal is executed rather than represented by a

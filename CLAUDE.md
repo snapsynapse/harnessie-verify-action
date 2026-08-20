@@ -22,7 +22,7 @@ It is a thin wrapper pinning a tested version of the `harnessie verify` CLI
   `shell: bash` + Python one-liners.
 - Runtime dependency: `harnessie` Python package, installed via `pip` at
   action-run time, version pinned by the `harnessie-version` input (default
-  `0.8.0` as of this writing; check `action.yml` for current pin).
+  `1.0.0` as of this writing; check `action.yml` for current pin).
 - Sandbox backends on Linux runners: bubblewrap, firejail, or docker (fail
   closed to CANNOT_VERIFY if none is admitted).
 - CI: GitHub Actions (`.github/workflows/ci.yml`), fully offline via a mock
