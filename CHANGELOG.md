@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 (2026-08-20)
+
+Pin the tested default to Harnessie 1.1.0. The `harnessie verify` CLI contract is unchanged between 1.0.0 and 1.1.0, so the action's public inputs, outputs, and fail-closed verdict contract (VERIFIED / FAILED / CANNOT_VERIFY; 0/1/2) are preserved. Harnessie 1.1.0 was installed from the live PyPI index before this pin advanced; this repository's fixture matrix remains the release gate.
+
 ## 0.1.2 (2026-08-19)
 
 Pin the tested default to Harnessie 1.0.0. The `harnessie verify` CLI contract is unchanged between 0.8.0 and 1.0.0, so the action's public inputs, outputs, and fail-closed verdict contract (VERIFIED / FAILED / CANNOT_VERIFY; 0/1/2) are preserved. Verified against a fresh-venv PyPI 1.0.0 install with the fixture mock provider mapping a failing check to exit 1.
