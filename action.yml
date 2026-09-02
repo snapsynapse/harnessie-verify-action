@@ -12,9 +12,21 @@ inputs:
     description: >-
       Path to a claims file, or "auto" to derive claims from the PR body
       (boilerplate stripped, provenance-stamped; auto is convenience, not
-      authority).
+      authority). Mutually exclusive with evidence-bundle.
     required: false
     default: "auto"
+  evidence-bundle:
+    description: >-
+      Path to a Harnessie v1 evidence bundle. Selecting it bypasses criteria:
+      auto; a non-auto criteria value is rejected as ambiguous.
+    required: false
+    default: ""
+  evidence-root:
+    description: >-
+      Directory containing files referenced by evidence-bundle. Required in
+      bundle mode; paths must remain content-addressed beneath this root.
+    required: false
+    default: ""
   checks:
     description: >-
       Deterministic check commands, one per line. Each runs sandboxed in the
@@ -29,9 +41,10 @@ inputs:
     default: ""
   models-endpoint:
     description: >-
-      OpenAI-compatible base URL for the verifier model (e.g. a self-hosted
-      endpoint). Used when models is not set. API key must arrive as the
-      HARNESSIE_MODEL_API_KEY env var from the workflow, never as an input.
+      OpenAI-compatible Chat Completions base URL for the verifier model (e.g.
+      a self-hosted endpoint). Used when models is not set. Current OpenAI
+      Responses models require a models.yaml. API keys arrive only through
+      HARNESSIE_MODEL_API_KEY.
     required: false
     default: ""
   models-model:
@@ -64,7 +77,7 @@ inputs:
   harnessie-version:
     description: "harnessie version to install (the action pins its tested default)."
     required: false
-    default: "1.1.0"
+    default: "1.2.0"
   max-steps:
     description: "Verifier agent step ceiling."
     required: false
@@ -90,8 +103,10 @@ runs:
 
     - name: Install harnessie
       shell: bash
+      env:
+        INPUT_HARNESSIE_VERSION: ${{ inputs.harnessie-version }}
       run: |
-        python3 -m pip install --quiet "harnessie==${{ inputs.harnessie-version }}"
+        python3 -m pip install --quiet "harnessie==$INPUT_HARNESSIE_VERSION"
         harnessie --help >/dev/null
 
     - name: Ensure sandbox backend (best effort)
@@ -119,7 +134,7 @@ runs:
         fi
 
     - name: Stage PR diff
-      if: ${{ inputs.stage-diff == 'true' && github.event_name == 'pull_request' }}
+      if: ${{ inputs.stage-diff == 'true' && inputs.evidence-bundle == '' && github.event_name == 'pull_request' }}
       shell: bash
       run: |
         BASE_SHA="${{ github.event.pull_request.base.sha }}"
@@ -131,16 +146,47 @@ runs:
           echo "::warning::base sha not available (shallow checkout?); PR.diff not staged. Use actions/checkout with fetch-depth: 0 to enable change-surface claims."
         fi
 
-    - name: Resolve criteria
+    - name: Resolve claims source
       id: criteria
       shell: bash
+      env:
+        INPUT_CRITERIA: ${{ inputs.criteria }}
+        INPUT_EVIDENCE_BUNDLE: ${{ inputs.evidence-bundle }}
+        INPUT_EVIDENCE_ROOT: ${{ inputs.evidence-root }}
       run: |
-        if [ "${{ inputs.criteria }}" != "auto" ]; then
-          if [ ! -f "${{ inputs.criteria }}" ]; then
-            echo "::error::criteria file not found: ${{ inputs.criteria }}"
+        if [ -n "$INPUT_EVIDENCE_BUNDLE" ]; then
+          if [ "$INPUT_CRITERIA" != "auto" ]; then
+            echo "::error::criteria and evidence-bundle are mutually exclusive"
             exit 1
           fi
-          echo "path=${{ inputs.criteria }}" >> "$GITHUB_OUTPUT"
+          if [ ! -f "$INPUT_EVIDENCE_BUNDLE" ]; then
+            echo "::error::evidence bundle not found: $INPUT_EVIDENCE_BUNDLE"
+            exit 1
+          fi
+          if [ -z "$INPUT_EVIDENCE_ROOT" ]; then
+            echo "::error::evidence-root is required with evidence-bundle"
+            exit 1
+          fi
+          if [ ! -d "$INPUT_EVIDENCE_ROOT" ]; then
+            echo "::error::evidence root is not a directory: $INPUT_EVIDENCE_ROOT"
+            exit 1
+          fi
+          if ! harnessie verify --help | grep -Fq -- "--evidence-bundle"; then
+            echo "::error::the selected harnessie-version does not support evidence bundles; use 1.2.0 or newer"
+            exit 1
+          fi
+          echo "kind=evidence-bundle" >> "$GITHUB_OUTPUT"
+          echo "path=$INPUT_EVIDENCE_BUNDLE" >> "$GITHUB_OUTPUT"
+          echo "evidence_root=$INPUT_EVIDENCE_ROOT" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [ "$INPUT_CRITERIA" != "auto" ]; then
+          if [ ! -f "$INPUT_CRITERIA" ]; then
+            echo "::error::criteria file not found: $INPUT_CRITERIA"
+            exit 1
+          fi
+          echo "kind=criteria" >> "$GITHUB_OUTPUT"
+          echo "path=$INPUT_CRITERIA" >> "$GITHUB_OUTPUT"
           exit 0
         fi
         # Auto mode: PR body verbatim minus HTML comments, provenance-stamped.
@@ -161,44 +207,70 @@ runs:
                     "the workspace artifacts.\n\n---\n\n")
             f.write(body + "\n")
         PYEOF
+        echo "kind=criteria" >> "$GITHUB_OUTPUT"
         echo "path=harnessie-claims.md" >> "$GITHUB_OUTPUT"
 
     - name: Resolve models config
       id: models
       shell: bash
+      env:
+        INPUT_MODELS: ${{ inputs.models }}
+        INPUT_MODELS_ENDPOINT: ${{ inputs.models-endpoint }}
+        INPUT_MODELS_MODEL: ${{ inputs.models-model }}
       run: |
-        if [ -n "${{ inputs.models }}" ]; then
-          echo "path=${{ inputs.models }}" >> "$GITHUB_OUTPUT"
+        if [ -n "$INPUT_MODELS" ]; then
+          echo "path=$INPUT_MODELS" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        if [ -z "${{ inputs.models-endpoint }}" ] || [ -z "${{ inputs.models-model }}" ]; then
+        if [ -z "$INPUT_MODELS_ENDPOINT" ] || [ -z "$INPUT_MODELS_MODEL" ]; then
           echo "::error::provide either models (a models.yaml path) or both models-endpoint and models-model"
           exit 1
         fi
-        cat > harnessie-models.yaml <<MODELSEOF
-        tiers:
-          mid:
-            provider: openai-compat
-            model_id: ${{ inputs.models-model }}
-            base_url: ${{ inputs.models-endpoint }}
-            api_key_env: HARNESSIE_MODEL_API_KEY
-            max_tokens: 8192
-            supports_effort: false
-        MODELSEOF
+        python3 - "$INPUT_MODELS_ENDPOINT" "$INPUT_MODELS_MODEL" <<'PYEOF'
+        import json
+        import sys
+
+        config = {"tiers": {"mid": {
+            "provider": "openai-compat",
+            "model_id": sys.argv[2],
+            "base_url": sys.argv[1],
+            "api_key_env": "HARNESSIE_MODEL_API_KEY",
+            "max_tokens": 8192,
+            "supports_effort": False,
+        }}}
+        with open("harnessie-models.yaml", "w", encoding="utf-8") as stream:
+            json.dump(config, stream)
+            stream.write("\n")
+        PYEOF
         echo "path=harnessie-models.yaml" >> "$GITHUB_OUTPUT"
 
     - name: Verify
       id: verify
       shell: bash
+      env:
+        INPUT_ALLOW_NETWORK: ${{ inputs.allow-network }}
+        INPUT_CHECKS: ${{ inputs.checks }}
+        INPUT_FAIL_ON_CANNOT_VERIFY: ${{ inputs.fail-on-cannot-verify }}
+        INPUT_MAX_STEPS: ${{ inputs.max-steps }}
+        INPUT_REPORT_ARTIFACT: ${{ inputs.report-artifact }}
+        CLAIMS_KIND: ${{ steps.criteria.outputs.kind }}
+        CLAIMS_PATH: ${{ steps.criteria.outputs.path }}
+        EVIDENCE_ROOT: ${{ steps.criteria.outputs.evidence_root }}
+        MODELS_PATH: ${{ steps.models.outputs.path }}
       run: |
-        ARGS=(--workspace . --criteria "${{ steps.criteria.outputs.path }}"
-              --models "${{ steps.models.outputs.path }}"
+        ARGS=(--workspace . --models "$MODELS_PATH"
               --report-dir "$RUNNER_TEMP/harnessie-verify-report"
-              --max-steps "${{ inputs.max-steps }}")
-        [ "${{ inputs.allow-network }}" = "true" ] && ARGS+=(--allow-network)
+              --max-steps "$INPUT_MAX_STEPS")
+        if [ "$CLAIMS_KIND" = "evidence-bundle" ]; then
+          ARGS+=(--evidence-bundle "$CLAIMS_PATH"
+                 --evidence-root "$EVIDENCE_ROOT")
+        else
+          ARGS+=(--criteria "$CLAIMS_PATH")
+        fi
+        [ "$INPUT_ALLOW_NETWORK" = "true" ] && ARGS+=(--allow-network)
         while IFS= read -r line; do
           [ -n "$line" ] && ARGS+=(--check "$line")
-        done <<< "${{ inputs.checks }}"
+        done <<< "$INPUT_CHECKS"
         set +e
         harnessie verify "${ARGS[@]}"
         CODE=$?
@@ -213,13 +285,20 @@ runs:
         REPORT="$RUNNER_TEMP/harnessie-verify-report/report.md"
         echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
         if [ -f "$REPORT" ]; then
-          # Structured report to the job summary. Model prose stays in the
-          # artifact; the summary is the header + checks + verdict lines.
-          head -c 60000 "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Harnessie verify: $VERDICT"
+            echo
+            echo "- Exit code: $CODE"
+            if [ "$INPUT_REPORT_ARTIFACT" = "true" ]; then
+              echo "- Full claim report and proofs: harnessie-verify-report artifact"
+            else
+              echo "- Full claim report upload: disabled by report-artifact input"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
         else
           echo "## Harnessie verify: $VERDICT (no report produced)" >> "$GITHUB_STEP_SUMMARY"
         fi
-        if [ "$CODE" = "2" ] && [ "${{ inputs.fail-on-cannot-verify }}" != "true" ]; then
+        if [ "$CODE" = "2" ] && [ "$INPUT_FAIL_ON_CANNOT_VERIFY" != "true" ]; then
           echo "::warning::verification could not run to a verdict (exit 2); advisory mode passed the job. Nothing was verified."
           exit 0
         fi
@@ -227,7 +306,7 @@ runs:
 
     - name: Upload report artifact
       if: ${{ always() && inputs.report-artifact == 'true' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: harnessie-verify-report
         path: ${{ runner.temp }}/harnessie-verify-report/

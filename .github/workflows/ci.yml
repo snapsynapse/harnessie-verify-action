@@ -11,7 +11,7 @@ jobs:
   failing-check-fails-job:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: verify
         continue-on-error: true
         uses: ./
@@ -29,7 +29,7 @@ jobs:
   cannot-verify-fails-closed:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: verify
         continue-on-error: true
         uses: ./
@@ -47,7 +47,7 @@ jobs:
   cannot-verify-advisory-passes:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: verify
         uses: ./
         with:
@@ -60,10 +60,96 @@ jobs:
         run: |
           test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
 
+  evidence-bundle-reaches-verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Build an exact-revision evidence bundle outside the workspace
+        run: >-
+          python3 scripts/make-evidence-fixture.py
+          --bundle "$RUNNER_TEMP/evidence.yaml"
+          --evidence-root "$RUNNER_TEMP/evidence-root"
+          --revision "$(git rev-parse HEAD)"
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          evidence-bundle: ${{ runner.temp }}/evidence.yaml
+          evidence-root: ${{ runner.temp }}/evidence-root
+          checks: "grep -q hello fixture/workspace/out.txt"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert evidence preflight passed before the mock provider halted
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test "${{ steps.verify.outputs.exit-code }}" = "2"
+          test -f "${{ steps.verify.outputs.report-path }}"
+          grep -Fq "evidence_bundle_sha256" "${{ steps.verify.outputs.report-path }}"
+
+  evidence-bundle-fresh-check-still-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Build an exact-revision evidence bundle outside the workspace
+        run: >-
+          python3 scripts/make-evidence-fixture.py
+          --bundle "$RUNNER_TEMP/evidence.yaml"
+          --evidence-root "$RUNNER_TEMP/evidence-root"
+          --revision "$(git rev-parse HEAD)"
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          evidence-bundle: ${{ runner.temp }}/evidence.yaml
+          evidence-root: ${{ runner.temp }}/evidence-root
+          checks: "false"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert fresh checks remain authoritative
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "FAILED"
+          test "${{ steps.verify.outputs.exit-code }}" = "1"
+          test -f "${{ steps.verify.outputs.report-path }}"
+          grep -Fq "evidence_bundle_sha256" "${{ steps.verify.outputs.report-path }}"
+
+  stale-evidence-bundle-refuses-before-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Build a stale-revision evidence bundle outside the workspace
+        run: >-
+          python3 scripts/make-evidence-fixture.py
+          --bundle "$RUNNER_TEMP/evidence.yaml"
+          --evidence-root "$RUNNER_TEMP/evidence-root"
+          --revision "0000000000000000000000000000000000000000"
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          evidence-bundle: ${{ runner.temp }}/evidence.yaml
+          evidence-root: ${{ runner.temp }}/evidence-root
+          checks: "false"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert stale preflight refused before the failing check ran
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test "${{ steps.verify.outputs.exit-code }}" = "2"
+          test ! -e "${{ steps.verify.outputs.report-path }}"
+
   refuses-pull-request-target:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Assert pull_request_target is refused
         run: |
           set +e

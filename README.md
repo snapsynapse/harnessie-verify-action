@@ -4,7 +4,7 @@ Claim-by-claim verification of pull requests, as a merge gate. The PR body is tr
 
 Reviewers opine. This adjudicates.
 
-Powered by [`harnessie verify`](https://harnessie.com/) (Apache-2.0). The action is a thin composite wrapper pinning a tested harnessie version; the verifier model is yours, any OpenAI-compatible endpoint, including one on your own infrastructure, so untrusted diffs never have to leave machines you control.
+Powered by [`harnessie verify`](https://harnessie.com/) (Apache-2.0). The action is a thin composite wrapper pinning a tested harnessie version; the verifier model is yours, any OpenAI-compatible endpoint, including one on your own infrastructure, so untrusted diffs never have to leave machines you control. Harnessie 1.2.0 accepts raw criteria or a v1 evidence bundle that binds stable claim IDs to an exact Git revision and content-addressed proofs.
 
 ## Quickstart (the safe pattern)
 
@@ -30,21 +30,41 @@ jobs:
           HARNESSIE_MODEL_API_KEY: ${{ secrets.VERIFIER_API_KEY }}
 ```
 
-That is the whole install. The job summary gets a claim-by-claim table; the full report and proof artifacts upload as a workflow artifact; the exit code gates the merge.
+That is the whole install. The job summary gets the deterministic verdict and exit code; the full claim-by-claim report and proof artifacts upload as a workflow artifact; the exit code gates the merge. Verifier prose stays out of the job summary.
+
+## Evidence-bound intake
+
+Use an evidence bundle when an upstream agent or harness can provide stronger provenance than a PR narrative. The bundle must declare the checked-out Git revision and dirty state, and every referenced diff or proof file must match its recorded SHA-256 digest beneath `evidence-root`.
+
+```yaml
+      - uses: snapsynapse/harnessie-verify-action@v0
+        with:
+          evidence-bundle: ${{ runner.temp }}/harnessie-evidence/bundle.yaml
+          evidence-root: ${{ runner.temp }}/harnessie-evidence
+          checks: |
+            python3 -m pytest tests/ -q
+          models: .harnessie/models.yaml
+```
+
+Generate the bundle and its evidence in an earlier step outside the checkout, after `actions/checkout`, using the observed `git rev-parse HEAD` and dirty state. Do not commit a bundle that embeds its own revision: that creates a self-reference, and generating files inside the checkout changes the dirty state being asserted.
+
+`evidence-bundle` bypasses the default `criteria: auto`. Supplying it together with an explicit non-auto `criteria` value is rejected before verification. `evidence-root` is mandatory in bundle mode. Bundle preflight fails closed on a stale revision, dirty-state mismatch, unsafe path, missing proof, digest drift, duplicate identifier, or incomplete claim binding. Recorded `checks[].command` and `exit_code` fields are evidence only; the action never executes them. Only commands supplied through the action's `checks` input run as fresh sandboxed checks.
 
 ## Inputs
 
 | Input | Default | What it does |
 |---|---|---|
-| `criteria` | `auto` | Path to a claims file, or `auto` to use the PR body verbatim (HTML comments stripped, provenance-stamped). Auto applies no extraction intelligence, deliberately: an action that authors the claims it grades is self-dealing. |
+| `criteria` | `auto` | Path to a claims file, or `auto` to use the PR body verbatim (HTML comments stripped, provenance-stamped). Auto applies no extraction intelligence, deliberately: an action that authors the claims it grades is self-dealing. Mutually exclusive with `evidence-bundle`; the default auto mode is bypassed when a bundle is supplied. |
+| `evidence-bundle` | none | Path to a Harnessie v1 evidence bundle binding claims to an exact Git state and content-addressed proofs. |
+| `evidence-root` | none | Required with `evidence-bundle`. Directory containing its referenced files; all must resolve beneath it. |
 | `checks` | none | Deterministic check commands, one per line, run sandboxed in the workspace. |
 | `models` | none | Path to a Harnessie `models.yaml` in your repo (full control: tiers, fallbacks, local endpoints). |
-| `models-endpoint` / `models-model` | none | Shortcut for a single OpenAI-compatible endpoint when you have no models.yaml. Key arrives via the `HARNESSIE_MODEL_API_KEY` env var, never as an input. |
+| `models-endpoint` / `models-model` | none | Shortcut for a single OpenAI-compatible Chat Completions endpoint when you have no models.yaml. Key arrives via the `HARNESSIE_MODEL_API_KEY` env var, never as an input. Current OpenAI Responses models require a supplied `models.yaml` with `provider: openai-responses`. |
 | `allow-network` | `false` | Let check commands use the network. The verifier agent stays network-denied regardless. |
-| `stage-diff` | `true` | Write the PR diff to `PR.diff` in the workspace so claims like "docs-only" and "additive" are checkable. Needs `fetch-depth: 0`. |
+| `stage-diff` | `true` | In criteria mode, write the PR diff to `PR.diff` so change-surface claims are checkable. Needs `fetch-depth: 0`. Bundle mode always skips this write because the bundle owns its content-addressed diff and exact dirty-state claim. |
 | `fail-on-cannot-verify` | `true` | Exit 2 fails the job. Set `false` for advisory mode; the job passes with a warning stating that nothing was verified. |
 | `report-artifact` | `true` | Upload report.md plus proof files as a workflow artifact. |
-| `harnessie-version` | `1.1.0` | The harnessie release this action version is tested against. Override at your own risk. |
+| `harnessie-version` | `1.2.0` | The Harnessie release this action version is tested against. Override at your own risk. |
 | `max-steps` | `20` | Verifier agent step ceiling. |
 
 Outputs: `verdict` (VERIFIED / FAILED / CANNOT_VERIFY), `exit-code`, `report-path`.
@@ -53,7 +73,7 @@ Outputs: `verdict` (VERIFIED / FAILED / CANNOT_VERIFY), `exit-code`, `report-pat
 
 - Use `on: pull_request`. Never `pull_request_target` with a checkout of the PR head: that pattern hands the PR author your secrets. The action detects `pull_request_target` and refuses to run.
 - Deterministic checks execute the PR's code, exactly like your normal CI running PR tests, with the same GitHub protections (fork PRs get no secrets). Checks additionally run inside an OS sandbox under harness control (bubblewrap, firejail, or docker on Linux runners) and are network-denied unless you opt in. No sandbox backend means checks are blocked and the run reports cannot-verify; nothing ever runs unsandboxed.
-- The verifier model reads workspace artifacts as data. Model-generated prose goes to the report artifact; what returns to the PR page is the structured claim table.
+- The verifier model reads workspace artifacts as data. Model-generated prose goes only to the report artifact; the job summary contains the deterministic verdict and exit code.
 - Sending diff content to a model is an egress decision. For repositories where that matters, point `models-endpoint` at infrastructure you control.
 
 ## What the exit codes mean
