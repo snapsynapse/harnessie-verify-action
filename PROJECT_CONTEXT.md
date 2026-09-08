@@ -47,7 +47,7 @@ exactly in any new content.
 
 ## Current status
 
-Release `0.2.0` pins Harnessie 1.2.0 and exposes its evidence-bundle intake
+Release `0.2.1` pins Harnessie 1.3.1 and exposes its evidence-bundle intake
 through backward-compatible action inputs while preserving the public outputs
 and fail-closed verdict contract. The unsafe-trigger guard is shared by runtime and CI so the
 `pull_request_target` refusal is executed rather than represented by a
