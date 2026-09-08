@@ -22,7 +22,7 @@ It is a thin wrapper pinning a tested version of the `harnessie verify` CLI
   `shell: bash` + Python one-liners.
 - Runtime dependency: `harnessie` Python package, installed via `pip` at
   action-run time, version pinned by the `harnessie-version` input (default
-  `1.3.1` as of this writing; check `action.yml` for current pin).
+  `1.4.1` for 0.2.2; check `action.yml` for current pin).
 - Sandbox backends on Linux runners: bubblewrap, firejail, or docker (fail
   closed to CANNOT_VERIFY if none is admitted).
 - CI: GitHub Actions (`.github/workflows/ci.yml`), fully offline via a mock
@@ -85,8 +85,10 @@ There is no build step. Per `README.md` and `.github/workflows/ci.yml`:
 
 ## Current state
 
-- Version: `0.2.1` (per `CHANGELOG.md`); release tags `v0.2.1` and `v0`
-  promote only after the exact release commit passes CI.
+- Version: `0.2.2`, default core pin `1.4.1`.
+- Retain all seven fixture jobs. Promote `v0.2.2` and stable `v0` only
+  after the exact release commit passes against the published core.
+  Inputs, outputs and the fail-closed verdict contract remain unchanged.
 - Reconcile current Git and release tags at session start; earlier checkout
   observations are not evidence of current branch or publication state.
 - No open TODOs/FIXMEs found in the tracked files. The README's own "Limits,

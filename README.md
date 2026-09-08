@@ -8,6 +8,8 @@ Powered by [`harnessie verify`](https://harnessie.com/) (Apache-2.0). The action
 
 ## Quickstart (the safe pattern)
 
+Action 0.2.2 defaults to Harnessie 1.4.1. This release changes the core pin only; action inputs, outputs and the fail-closed verdict contract remain unchanged. Exact-version and stable-major tags advance only after all seven fixture jobs pass on the release commit.
+
 ```yaml
 name: verify-pr-claims
 on:
@@ -64,7 +66,7 @@ Generate the bundle and its evidence in an earlier step outside the checkout, af
 | `stage-diff` | `true` | In criteria mode, write the PR diff to `PR.diff` so change-surface claims are checkable. Needs `fetch-depth: 0`. Bundle mode always skips this write because the bundle owns its content-addressed diff and exact dirty-state claim. |
 | `fail-on-cannot-verify` | `true` | Exit 2 fails the job. Set `false` for advisory mode; the job passes with a warning stating that nothing was verified. |
 | `report-artifact` | `true` | Upload report.md plus proof files as a workflow artifact. |
-| `harnessie-version` | `1.3.1` | The Harnessie release this action version is tested against. Override at your own risk. |
+| `harnessie-version` | `1.4.1` | The Harnessie release this action version is tested against. Override at your own risk. |
 | `max-steps` | `20` | Verifier agent step ceiling. |
 
 Outputs: `verdict` (VERIFIED / FAILED / CANNOT_VERIFY), `exit-code`, `report-path`.
