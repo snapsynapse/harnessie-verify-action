@@ -47,9 +47,11 @@ exactly in any new content.
 
 ## Current status
 
-Release `0.2.1` pins Harnessie 1.3.1 and exposes its evidence-bundle intake
-through backward-compatible action inputs while preserving the public outputs
-and fail-closed verdict contract. The unsafe-trigger guard is shared by runtime and CI so the
+Version `0.2.2` sets the default Harnessie pin to 1.4.1. The update preserves
+existing evidence-bundle inputs, public outputs and the fail-closed verdict
+contract. All seven fixture jobs must pass against the published core on
+the exact Action release commit before release tags advance.
+
+The unsafe-trigger guard is shared by runtime and CI so the
 `pull_request_target` refusal is executed rather than represented by a
-permanently skipped job. Exact-version and stable-major tags promote only
-after the release commit passes CI.
+permanently skipped job.

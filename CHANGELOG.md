@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 (2026-09-08)
+
+Advance the default core pin to Harnessie 1.4.1 while preserving action inputs, outputs and the fail-closed verdict contract. The seven-job fixture matrix must pass against the published core on the exact release commit before the exact-version and stable-major tags advance.
+
 ## 0.2.1 (2026-09-08)
 
 Advance the tested default to Harnessie 1.3.1. It includes bounded parser refusal fixes and release-integrity improvements while preserving the action inputs, outputs and fail-closed verdict contract. The seven-job fixture matrix must pass against the published core before the exact-version and stable-major tags advance.
