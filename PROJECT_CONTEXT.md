@@ -47,7 +47,7 @@ exactly in any new content.
 
 ## Current status
 
-Version `0.2.2` sets the default Harnessie pin to 1.4.1. The update preserves
+Version `0.2.3` sets the default Harnessie pin to 1.5.0. The update preserves
 existing evidence-bundle inputs, public outputs and the fail-closed verdict
 contract. All seven fixture jobs must pass against the published core on
 the exact Action release commit before release tags advance.
