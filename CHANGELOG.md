@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 (2026-10-06)
+
+Advance the default core pin to Harnessie 1.5.0 while preserving action inputs, outputs and the fail-closed verdict contract. Harnessie 1.5.0 verify reports additionally name the harness itself (installed version, inward-manifest digest and tool-surface digest) beside the brain. The seven-job fixture matrix must pass against the published core on the exact release commit before the exact-version and stable-major tags advance.
+
 ## 0.2.2 (2026-09-08)
 
 Advance the default core pin to Harnessie 1.4.1 while preserving action inputs, outputs and the fail-closed verdict contract. The seven-job fixture matrix must pass against the published core on the exact release commit before the exact-version and stable-major tags advance.
