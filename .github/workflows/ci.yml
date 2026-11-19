@@ -43,10 +43,12 @@ jobs:
             check: ./fixture/missing-check-executable
             fail-on-cannot-verify: "true"
             expected-outcome: failure
+            expect-missing-executable: true
           - name: missing-check-cannot-verify (advisory)
             check: ./fixture/missing-check-executable
             fail-on-cannot-verify: "false"
             expected-outcome: success
+            expect-missing-executable: true
     name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -65,7 +67,7 @@ jobs:
           test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
           test "${{ steps.verify.outputs.exit-code }}" = "2"
       - name: Assert the missing executable blocked the check before launch
-        if: ${{ matrix.check == './fixture/missing-check-executable' }}
+        if: ${{ matrix.expect-missing-executable }}
         env:
           REPORT_PATH: ${{ steps.verify.outputs.report-path }}
         run: |
