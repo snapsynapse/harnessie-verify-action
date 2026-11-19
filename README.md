@@ -8,7 +8,7 @@ Powered by [`harnessie verify`](https://harnessie.com/) (Apache-2.0). The action
 
 ## Quickstart (the safe pattern)
 
-Action 0.2.3 defaults to Harnessie 1.5.0. This release changes the core pin only; action inputs, outputs and the fail-closed verdict contract remain unchanged. Exact-version and stable-major tags advance only after all seven fixture jobs pass on the release commit.
+Action 0.2.4 defaults to Harnessie 1.5.1. A check blocked before launch reports `CANNOT_VERIFY`. A check that launches and fails or times out reports `FAILED`. Release tags advance after the offline fixtures pass on the release commit.
 
 ```yaml
 name: verify-pr-claims
@@ -66,7 +66,7 @@ Generate the bundle and its evidence in an earlier step outside the checkout, af
 | `stage-diff` | `true` | In criteria mode, write the PR diff to `PR.diff` so change-surface claims are checkable. Needs `fetch-depth: 0`. Bundle mode always skips this write because the bundle owns its content-addressed diff and exact dirty-state claim. |
 | `fail-on-cannot-verify` | `true` | Exit 2 fails the job. Set `false` for advisory mode; the job passes with a warning stating that nothing was verified. |
 | `report-artifact` | `true` | Upload report.md plus proof files as a workflow artifact. |
-| `harnessie-version` | `1.5.0` | The Harnessie release this action version is tested against. Override at your own risk. |
+| `harnessie-version` | `1.5.1` | The Harnessie release this action version is tested against. Override at your own risk. |
 | `max-steps` | `20` | Verifier agent step ceiling. |
 
 Outputs: `verdict` (VERIFIED / FAILED / CANNOT_VERIFY), `exit-code`, `report-path`.
@@ -75,6 +75,7 @@ Outputs: `verdict` (VERIFIED / FAILED / CANNOT_VERIFY), `exit-code`, `report-pat
 
 - Use `on: pull_request`. Never `pull_request_target` with a checkout of the PR head: that pattern hands the PR author your secrets. The action detects `pull_request_target` and refuses to run.
 - Deterministic checks execute the PR's code, exactly like your normal CI running PR tests, with the same GitHub protections (fork PRs get no secrets). Checks additionally run inside an OS sandbox under harness control (bubblewrap, firejail, or docker on Linux runners) and are network-denied unless you opt in. No sandbox backend means checks are blocked and the run reports cannot-verify; nothing ever runs unsandboxed.
+- On GitHub-hosted Linux runners, the Action may install bubblewrap and relax AppArmor and user-namespace settings when its probe fails. Self-hosted runners require a preconfigured sandbox backend. If none is usable, checks are blocked and verification fails closed by default.
 - The verifier model reads workspace artifacts as data. Model-generated prose goes only to the report artifact; the job summary contains the deterministic verdict and exit code.
 - Sending diff content to a model is an egress decision. For repositories where that matters, point `models-endpoint` at infrastructure you control.
 

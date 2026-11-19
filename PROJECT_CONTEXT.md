@@ -47,10 +47,10 @@ exactly in any new content.
 
 ## Current status
 
-Version `0.2.3` sets the default Harnessie pin to 1.5.0. The update preserves
-existing evidence-bundle inputs, public outputs and the fail-closed verdict
-contract. All seven fixture jobs must pass against the published core on
-the exact Action release commit before release tags advance.
+Version `0.2.4` sets the default Harnessie pin to 1.5.1. The seven original
+offline fixture jobs and both missing executable cases must pass against the
+published core on the release commit before release tags advance.
+Automatic sandbox setup runs only on GitHub-hosted Linux.
 
 The unsafe-trigger guard is shared by runtime and CI so the
 `pull_request_target` refusal is executed rather than represented by a

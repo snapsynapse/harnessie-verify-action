@@ -26,8 +26,32 @@ jobs:
           test "${{ steps.verify.outputs.verdict }}" = "FAILED"
           test "${{ steps.verify.outputs.exit-code }}" = "1"
 
-  cannot-verify-fails-closed:
+  cannot-verify:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: cannot-verify-fails-closed
+            check: grep -q hello fixture/workspace/out.txt
+            fail-on-cannot-verify: "true"
+            expected-outcome: failure
+            expect-missing-executable: false
+          - name: cannot-verify-advisory-passes
+            check: grep -q hello fixture/workspace/out.txt
+            fail-on-cannot-verify: "false"
+            expected-outcome: success
+            expect-missing-executable: false
+          - name: missing-check-cannot-verify (default)
+            check: ./fixture/missing-check-executable
+            fail-on-cannot-verify: "true"
+            expected-outcome: failure
+            expect-missing-executable: true
+          - name: missing-check-cannot-verify (advisory)
+            check: ./fixture/missing-check-executable
+            fail-on-cannot-verify: "false"
+            expected-outcome: success
+            expect-missing-executable: true
+    name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: verify
@@ -35,30 +59,22 @@ jobs:
         uses: ./
         with:
           criteria: fixture/claims.md
-          checks: "grep -q hello fixture/workspace/out.txt"
+          checks: ${{ matrix.check }}
           models: fixture/models-mock.yaml
+          fail-on-cannot-verify: ${{ matrix.fail-on-cannot-verify }}
           report-artifact: "false"
-      - name: Assert CANNOT_VERIFY failed the job (fail-closed default)
+      - name: Assert CANNOT_VERIFY and the expected job outcome
         run: |
-          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outcome }}" = "${{ matrix.expected-outcome }}"
           test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
           test "${{ steps.verify.outputs.exit-code }}" = "2"
-
-  cannot-verify-advisory-passes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - id: verify
-        uses: ./
-        with:
-          criteria: fixture/claims.md
-          checks: "grep -q hello fixture/workspace/out.txt"
-          models: fixture/models-mock.yaml
-          fail-on-cannot-verify: "false"
-          report-artifact: "false"
-      - name: Assert advisory mode passed with CANNOT_VERIFY
+      - name: Inspect prelaunch proof for missing-executable cases
+        if: ${{ matrix.expect-missing-executable == true }}
+        env:
+          REPORT_PATH: ${{ steps.verify.outputs.report-path }}
         run: |
-          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test -f "$REPORT_PATH"
+          grep -RFq "executable not found: ./fixture/missing-check-executable" "$(dirname "$REPORT_PATH")"
 
   evidence-bundle-reaches-verifier:
     runs-on: ubuntu-latest

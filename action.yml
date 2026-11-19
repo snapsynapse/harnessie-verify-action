@@ -77,7 +77,7 @@ inputs:
   harnessie-version:
     description: "harnessie version to install (the action pins its tested default)."
     required: false
-    default: "1.5.0"
+    default: "1.5.1"
   max-steps:
     description: "Verifier agent step ceiling."
     required: false
@@ -109,24 +109,23 @@ runs:
         python3 -m pip install --quiet "harnessie==$INPUT_HARNESSIE_VERSION"
         harnessie --help >/dev/null
 
-    - name: Ensure sandbox backend (best effort)
+    - name: Set up bubblewrap on GitHub-hosted Linux (best effort)
+      if: ${{ runner.environment == 'github-hosted' && runner.os == 'Linux' }}
       shell: bash
       run: |
-        # Harness checks run only inside an OS sandbox and fail closed without
-        # one (exit 2). Linux backend order: bubblewrap, firejail, docker.
         # Ubuntu 24.04 runners ship AppArmor restrictions on unprivileged user
         # namespaces, which makes bwrap fail its usability probe even when
-        # installed; relaxing it on the ephemeral runner VM is the documented
-        # trade for a working sandbox. Every step here is non-fatal: with no
-        # admitted backend the harness fails closed, never unsandboxed.
-        if [ "$(uname -s)" = "Linux" ]; then
-          command -v bwrap >/dev/null || sudo apt-get install -y -q bubblewrap 2>/dev/null || true
-          if command -v bwrap >/dev/null && \
-             ! bwrap --ro-bind / / --unshare-net --die-with-parent true 2>/dev/null; then
-            sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
-            sudo sysctl -qw kernel.unprivileged_userns_clone=1 2>/dev/null || true
-          fi
+        # installed. Relax them only on GitHub-hosted Linux runners.
+        command -v bwrap >/dev/null || sudo apt-get install -y -q bubblewrap 2>/dev/null || true
+        if command -v bwrap >/dev/null && \
+           ! bwrap --ro-bind / / --unshare-net --die-with-parent true 2>/dev/null; then
+          sudo sysctl -qw kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
+          sudo sysctl -qw kernel.unprivileged_userns_clone=1 2>/dev/null || true
         fi
+
+    - name: Detect sandbox backend
+      shell: bash
+      run: |
         BACKEND=$(python3 -c "from harness.sandbox import backend_name; print(backend_name())")
         echo "harness sandbox backend: $BACKEND"
         if [ "$BACKEND" = "None" ]; then
