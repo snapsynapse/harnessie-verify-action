@@ -34,15 +34,19 @@ jobs:
           - name: cannot-verify-fails-closed
             check: grep -q hello fixture/workspace/out.txt
             fail-on-cannot-verify: "true"
+            expected-outcome: failure
           - name: cannot-verify-advisory-passes
             check: grep -q hello fixture/workspace/out.txt
             fail-on-cannot-verify: "false"
+            expected-outcome: success
           - name: missing-check-cannot-verify (default)
             check: ./fixture/missing-check-executable
             fail-on-cannot-verify: "true"
+            expected-outcome: failure
           - name: missing-check-cannot-verify (advisory)
             check: ./fixture/missing-check-executable
             fail-on-cannot-verify: "false"
+            expected-outcome: success
     name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -57,7 +61,7 @@ jobs:
           report-artifact: "false"
       - name: Assert CANNOT_VERIFY and the expected job outcome
         run: |
-          test "${{ steps.verify.outcome }}" = "${{ matrix.fail-on-cannot-verify == 'true' && 'failure' || 'success' }}"
+          test "${{ steps.verify.outcome }}" = "${{ matrix.expected-outcome }}"
           test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
           test "${{ steps.verify.outputs.exit-code }}" = "2"
       - name: Assert the missing executable blocked the check before launch
