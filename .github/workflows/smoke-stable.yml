@@ -1,0 +1,33 @@
+name: Manual smoke test of stable v0
+on:
+  workflow_dispatch:
+    inputs:
+      harnessie-version:
+        description: Expected Harnessie version installed by the published Action
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  stable-tag-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: verify
+        continue-on-error: true
+        uses: snapsynapse/harnessie-verify-action@v0
+        with:
+          criteria: fixture/claims.md
+          checks: "false"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert the published Action runs a deterministic check
+        env:
+          EXPECTED_HARNESSIE_VERSION: ${{ inputs.harnessie-version }}
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "FAILED"
+          test "${{ steps.verify.outputs.exit-code }}" = "1"
+          python3 -c 'from importlib.metadata import version; from os import environ; assert version("harnessie") == environ["EXPECTED_HARNESSIE_VERSION"]'

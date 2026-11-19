@@ -3,7 +3,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
 
 jobs:
   # The offline matrix proves the action's wiring and exit-code mapping with
@@ -27,18 +26,24 @@ jobs:
           test "${{ steps.verify.outputs.verdict }}" = "FAILED"
           test "${{ steps.verify.outputs.exit-code }}" = "1"
 
-  missing-check-cannot-verify:
+  cannot-verify:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - mode: default
+          - name: cannot-verify-fails-closed
+            check: grep -q hello fixture/workspace/out.txt
             fail-on-cannot-verify: "true"
-            expected-outcome: failure
-          - mode: advisory
+          - name: cannot-verify-advisory-passes
+            check: grep -q hello fixture/workspace/out.txt
             fail-on-cannot-verify: "false"
-            expected-outcome: success
-    name: missing-check-cannot-verify (${{ matrix.mode }})
+          - name: missing-check-cannot-verify (default)
+            check: ./fixture/missing-check-executable
+            fail-on-cannot-verify: "true"
+          - name: missing-check-cannot-verify (advisory)
+            check: ./fixture/missing-check-executable
+            fail-on-cannot-verify: "false"
+    name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: verify
@@ -46,53 +51,22 @@ jobs:
         uses: ./
         with:
           criteria: fixture/claims.md
-          checks: "./fixture/missing-check-executable"
+          checks: ${{ matrix.check }}
           models: fixture/models-mock.yaml
           fail-on-cannot-verify: ${{ matrix.fail-on-cannot-verify }}
           report-artifact: "false"
+      - name: Assert CANNOT_VERIFY and the expected job outcome
+        run: |
+          test "${{ steps.verify.outcome }}" = "${{ matrix.fail-on-cannot-verify == 'true' && 'failure' || 'success' }}"
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test "${{ steps.verify.outputs.exit-code }}" = "2"
       - name: Assert the missing executable blocked the check before launch
+        if: ${{ matrix.check == './fixture/missing-check-executable' }}
         env:
           REPORT_PATH: ${{ steps.verify.outputs.report-path }}
         run: |
-          test "${{ steps.verify.outcome }}" = "${{ matrix.expected-outcome }}"
-          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
-          test "${{ steps.verify.outputs.exit-code }}" = "2"
           test -f "$REPORT_PATH"
           grep -RFq "executable not found: ./fixture/missing-check-executable" "$(dirname "$REPORT_PATH")"
-
-  cannot-verify-fails-closed:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - id: verify
-        continue-on-error: true
-        uses: ./
-        with:
-          criteria: fixture/claims.md
-          checks: "grep -q hello fixture/workspace/out.txt"
-          models: fixture/models-mock.yaml
-          report-artifact: "false"
-      - name: Assert CANNOT_VERIFY failed the job (fail-closed default)
-        run: |
-          test "${{ steps.verify.outcome }}" = "failure"
-          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
-          test "${{ steps.verify.outputs.exit-code }}" = "2"
-
-  cannot-verify-advisory-passes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - id: verify
-        uses: ./
-        with:
-          criteria: fixture/claims.md
-          checks: "grep -q hello fixture/workspace/out.txt"
-          models: fixture/models-mock.yaml
-          fail-on-cannot-verify: "false"
-          report-artifact: "false"
-      - name: Assert advisory mode passed with CANNOT_VERIFY
-        run: |
-          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
 
   evidence-bundle-reaches-verifier:
     runs-on: ubuntu-latest
@@ -195,24 +169,3 @@ jobs:
           grep -Fq "must run on pull_request, never pull_request_target" <<< "$OUTPUT"
       - name: Assert pull_request is admitted
         run: bash scripts/refuse-unsafe-trigger.sh pull_request
-
-  stable-tag-consumer:
-    name: Manual smoke test of stable v0
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - id: verify
-        continue-on-error: true
-        uses: snapsynapse/harnessie-verify-action@v0
-        with:
-          criteria: fixture/claims.md
-          checks: "false"
-          models: fixture/models-mock.yaml
-          report-artifact: "false"
-      - name: Assert the published Action runs a deterministic check
-        run: |
-          test "${{ steps.verify.outcome }}" = "failure"
-          test "${{ steps.verify.outputs.verdict }}" = "FAILED"
-          test "${{ steps.verify.outputs.exit-code }}" = "1"
-          python3 -c 'from importlib.metadata import version; assert version("harnessie") == "1.5.1"'
