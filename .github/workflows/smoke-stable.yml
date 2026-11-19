@@ -24,10 +24,11 @@ jobs:
           models: fixture/models-mock.yaml
           report-artifact: "false"
       - name: Assert the published Action runs a deterministic check
+        shell: bash
         env:
           EXPECTED_HARNESSIE_VERSION: ${{ inputs.harnessie-version }}
         run: |
-          test "${{ steps.verify.outcome }}" = "failure"
-          test "${{ steps.verify.outputs.verdict }}" = "FAILED"
-          test "${{ steps.verify.outputs.exit-code }}" = "1"
+          [[ "${{ steps.verify.outcome }}" == "failure" ]]
+          [[ "${{ steps.verify.outputs.verdict }}" == "FAILED" ]]
+          [[ "${{ steps.verify.outputs.exit-code }}" == "1" ]]
           python3 -c 'from importlib.metadata import version; from os import environ; assert version("harnessie") == environ["EXPECTED_HARNESSIE_VERSION"]'

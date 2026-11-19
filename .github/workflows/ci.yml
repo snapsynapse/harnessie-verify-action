@@ -186,10 +186,11 @@ jobs:
           fail-on-cannot-verify: ${{ matrix.fail-on-cannot-verify }}
           report-artifact: "false"
       - name: Assert the missing executable caused CANNOT_VERIFY
+        shell: bash
         env:
           REPORT_PATH: ${{ steps.verify.outputs.report-path }}
         run: |
-          test "${{ steps.verify.outcome }}" = "${{ matrix.expected-outcome }}"
-          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
-          test "${{ steps.verify.outputs.exit-code }}" = "2"
+          [[ "${{ steps.verify.outcome }}" == "${{ matrix.expected-outcome }}" ]]
+          [[ "${{ steps.verify.outputs.verdict }}" == "CANNOT_VERIFY" ]]
+          [[ "${{ steps.verify.outputs.exit-code }}" == "2" ]]
           grep -Fq "executable not found: ./fixture/missing-check-executable" "$REPORT_PATH"
