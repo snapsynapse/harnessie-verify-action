@@ -35,22 +35,22 @@ jobs:
             check: grep -q hello fixture/workspace/out.txt
             fail-on-cannot-verify: "true"
             expected-outcome: failure
-            expect-missing-executable: false
+            expected-proof: outcome=passed
           - name: cannot-verify-advisory-passes
             check: grep -q hello fixture/workspace/out.txt
             fail-on-cannot-verify: "false"
             expected-outcome: success
-            expect-missing-executable: false
+            expected-proof: outcome=passed
           - name: missing-check-cannot-verify (default)
             check: ./fixture/missing-check-executable
             fail-on-cannot-verify: "true"
             expected-outcome: failure
-            expect-missing-executable: true
+            expected-proof: "executable not found: ./fixture/missing-check-executable"
           - name: missing-check-cannot-verify (advisory)
             check: ./fixture/missing-check-executable
             fail-on-cannot-verify: "false"
             expected-outcome: success
-            expect-missing-executable: true
+            expected-proof: "executable not found: ./fixture/missing-check-executable"
     name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -63,18 +63,16 @@ jobs:
           models: fixture/models-mock.yaml
           fail-on-cannot-verify: ${{ matrix.fail-on-cannot-verify }}
           report-artifact: "false"
-      - name: Assert CANNOT_VERIFY and the expected job outcome
+      - name: Assert CANNOT_VERIFY, the step outcome, and check proof
+        env:
+          REPORT_PATH: ${{ steps.verify.outputs.report-path }}
+          EXPECTED_PROOF: ${{ matrix.expected-proof }}
         run: |
           test "${{ steps.verify.outcome }}" = "${{ matrix.expected-outcome }}"
           test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
           test "${{ steps.verify.outputs.exit-code }}" = "2"
-      - name: Inspect prelaunch proof for missing-executable cases
-        if: ${{ matrix.expect-missing-executable == true }}
-        env:
-          REPORT_PATH: ${{ steps.verify.outputs.report-path }}
-        run: |
           test -f "$REPORT_PATH"
-          grep -RFq "executable not found: ./fixture/missing-check-executable" "$(dirname "$REPORT_PATH")"
+          grep -RFq -- "$EXPECTED_PROOF" "$(dirname "$REPORT_PATH")/proofs"
 
   evidence-bundle-reaches-verifier:
     runs-on: ubuntu-latest
