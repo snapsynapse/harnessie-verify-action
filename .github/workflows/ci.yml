@@ -197,6 +197,7 @@ jobs:
         run: bash scripts/refuse-unsafe-trigger.sh pull_request
 
   stable-tag-consumer:
+    name: Manual smoke test of stable v0
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
