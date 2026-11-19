@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   # The offline matrix proves the action's wiring and exit-code mapping with
@@ -25,6 +26,40 @@ jobs:
           test "${{ steps.verify.outcome }}" = "failure"
           test "${{ steps.verify.outputs.verdict }}" = "FAILED"
           test "${{ steps.verify.outputs.exit-code }}" = "1"
+
+  missing-check-cannot-verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - mode: default
+            fail-on-cannot-verify: "true"
+            expected-outcome: failure
+          - mode: advisory
+            fail-on-cannot-verify: "false"
+            expected-outcome: success
+    name: missing-check-cannot-verify (${{ matrix.mode }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          criteria: fixture/claims.md
+          checks: "./fixture/missing-check-executable"
+          models: fixture/models-mock.yaml
+          fail-on-cannot-verify: ${{ matrix.fail-on-cannot-verify }}
+          report-artifact: "false"
+      - name: Assert the missing executable blocked the check before launch
+        env:
+          REPORT_PATH: ${{ steps.verify.outputs.report-path }}
+        run: |
+          test "${{ steps.verify.outcome }}" = "${{ matrix.expected-outcome }}"
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test "${{ steps.verify.outputs.exit-code }}" = "2"
+          python3 -c 'from importlib.metadata import version; assert version("harnessie") == "1.5.1"'
+          test -f "$REPORT_PATH"
+          grep -RFq "executable not found: ./fixture/missing-check-executable" "$(dirname "$REPORT_PATH")"
 
   cannot-verify-fails-closed:
     runs-on: ubuntu-latest
@@ -161,3 +196,23 @@ jobs:
           grep -Fq "must run on pull_request, never pull_request_target" <<< "$OUTPUT"
       - name: Assert pull_request is admitted
         run: bash scripts/refuse-unsafe-trigger.sh pull_request
+
+  stable-tag-consumer:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: verify
+        continue-on-error: true
+        uses: snapsynapse/harnessie-verify-action@v0
+        with:
+          criteria: fixture/claims.md
+          checks: "./fixture/missing-check-executable"
+          models: fixture/models-mock.yaml
+          report-artifact: "false"
+      - name: Assert the published Action blocks a missing executable
+        run: |
+          test "${{ steps.verify.outcome }}" = "failure"
+          test "${{ steps.verify.outputs.verdict }}" = "CANNOT_VERIFY"
+          test "${{ steps.verify.outputs.exit-code }}" = "2"
+          python3 -c 'from importlib.metadata import version; assert version("harnessie") == "1.5.1"'
